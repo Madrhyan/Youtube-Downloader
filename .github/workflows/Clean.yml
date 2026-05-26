@@ -1,105 +1,95 @@
-name: 03 - ⚙️ Maintenance & Cleanup پاکسازی پوشه Video💫
+name: 02 - 🚀 Ultimate Anti-Block YouTube Downloader (Custom Edition)
 
 on:
   workflow_dispatch:
+    inputs:
+      video_urls:
+        description: '📥 لینک ویدیوها - چند لینک را با فاصله از هم جدا کنید'
+        required: true
+        type: string
+      video_quality:
+        description: '🎬 انتخاب کیفیت ویدیو'
+        required: true
+        type: choice
+        default: 'best'
+        options:
+          - 'best'
+          - '1080'
+          - '720'
+          - '480'
+          - '360'
 
 jobs:
-  cleanup-videos:
-    name: "🧹 Cleaning Up Videos Folder"
+  get-video-free:
+    name: "📥 Processing Video Download Workflow"
     runs-on: ubuntu-latest
+    timeout-minutes: 180
     permissions:
       contents: write
 
     steps:
-      - name: Checkout Repository
+      - name: Show System Notice
+        run: |
+          echo ""
+          echo "========================================"
+          echo "🚀 ULTIMATE YOUTUBE DOWNLOADER"
+          echo "========================================"
+          echo ""
+          echo "🎯 Selected Quality: ${{ github.event.inputs.video_quality }}"
+          echo ""
+          echo "========================================"
+          echo ""
+
+      - name: Check URL provided
+        run: |
+          if [ -z "${{ github.event.inputs.video_urls }}" ]; then
+            echo "❌ No video URL provided!"
+            exit 1
+          fi
+
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - name: Configure Git
+      - name: Configure Git for Large Files
         run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "github-actions@github.com"
+          git config --global http.postBuffer 524288000
+          git config --global http.maxRequestBuffer 100M
+          git config --global core.compression 0
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
 
-      - name: Purge Videos and Reset Master List
+      - name: Start WARP Container
         run: |
-          echo "========================================"
-          echo "🧹 Starting storage cleanup process..."
-          echo "========================================"
-          
-          # حذف تمام محتویات داخل پوشه ویدیوها
-          if [ -d "videos" ]; then
-            rm -rf videos/*
-          else
-            mkdir -p videos
-          fi
-          
-          # بازسازی فایل مستر لیست به صورت کاملاً تمیز
-          MASTER_README="videos/README.md"
-          { 
-            echo "# DOWNLOADED VIDEOS LIST :"; 
-            echo ""; 
-            echo "----"; 
-            echo ""; 
-            echo "> ℹ️ No videos available. Storage is clean.";
-          } > "$MASTER_README"
-          
-          echo "✅ Videos folder successfully emptied."
+          echo "Starting Cloudflare WARP container..."
+          docker network create warp-net || true
+          docker run -d \
+            --name warp \
+            --restart=always \
+            --network warp-net \
+            -p 1080:1080 \
+            --cap-add NET_ADMIN \
+            --sysctl net.ipv6.conf.all.disable_ipv6=0 \
+            --sysctl net.ipv4.conf.all.src_valid_mark=1 \
+            -v warp-data:/var/lib/cloudflare-warp \
+            caomingjun/warp
+          echo "Waiting for WARP to initialize (15 seconds)..."
+          sleep 15
+          for i in {1..5}; do
+            RESULT=$(curl -s --max-time 5 --socks5-hostname 127.0.0.1:1080 https://cloudflare.com/cdn-cgi/trace 2>/dev/null || echo "failed")
+            if echo "$RESULT" | grep -qE "warp=(on|plus)"; then
+              echo "WARP is active!"
+              break
+            else
+              echo "Attempt $i/5 - WARP not ready yet, waiting..."
+              sleep 5
+            fi
+          done
 
-      - name: Commit and Push Changes
+      - name: Install Dependencies
         run: |
-          BRANCH="${GITHUB_REF_NAME}"
-          git fetch origin "$BRANCH"
-          git reset --hard origin/"$BRANCH"
-          
-          # اعمال دوباره حذفیات روی برنچ اصلی
-          rm -rf videos/*
-          mkdir -p videos
-          
-          MASTER_README="videos/README.md"
-          { 
-            echo "# DOWNLOADED VIDEOS LIST :"; 
-            echo ""; 
-            echo "----"; 
-            echo ""; 
-            echo "> ℹ️ No videos available. Storage is clean.";
-          } > "$MASTER_README"
-
-          git add videos/
-          git add videos/README.md
-
-          if ! git diff --cached --quiet; then
-            git commit -m "[SYSTEM] Repository storage cleaned up successfully [skip ci]"
-            PUSH_RETRY=0
-            while [ $PUSH_RETRY -lt 5 ]; do
-              PUSH_RETRY=$((PUSH_RETRY + 1))
-              if timeout 60 git push origin HEAD:"$BRANCH"; then
-                echo ""
-                echo "========================================"
-                echo "✅ پوشه ویدیوها کاملاً پاکسازی و هارد آزاد شد!"
-                echo "========================================"
-                echo ""
-                break
-              else
-                echo "Push failed, retrying $PUSH_RETRY/5..."
-                sleep 5
-                git fetch origin "$BRANCH"
-                git reset --hard origin/"$BRANCH"
-                rm -rf videos/*
-                mkdir -p videos
-                { 
-                  echo "# DOWNLOADED VIDEOS LIST :"; 
-                  echo ""; 
-                  echo "----"; 
-                  echo ""; 
-                  echo "> ℹ️ No videos available. Storage is clean.";
-                } > "$MASTER_README"
-                git add videos/
-                git add videos/README.md
-                git diff --cached --quiet || git commit -m "[SYSTEM] Repository storage cleaned up successfully [skip ci]"
-              fi
-            done
-          else
-            echo "Storage was already clean. No changes to push."
-          fi
+          sudo apt-get update
+          sudo apt-get install -y python3-pip ffmpeg zip p7zip-full curl jq bc unzip
+          curl -fs
