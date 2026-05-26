@@ -1,21 +1,4 @@
-# فایل‌های موقتی و کش پایتون
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.pytest_cache/
-
 # پوشه‌های دانلود و فایل‌های موقتی سیستم شما
 downloads/
 videos/
 tmp_downloads_*/
-*.part
-*.ytdl
-
-# فایلهای موقت سیستم عامل‌ها
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# فایل‌های لاگ و گزارش خطا
-*.log
