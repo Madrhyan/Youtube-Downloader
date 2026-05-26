@@ -1,4 +1,4 @@
-name: 02 - 🚀 YT یوتیوب دانلودر
+name: 02 - 🚀YT یوتیوب دانلودر
 
 on:
   workflow_dispatch:
@@ -99,7 +99,7 @@ jobs:
           deno --version
           pip3 install --upgrade yt-dlp
 
-      - name: Download YouTube Video (Free - 360p)
+      - name: Core Download Engine
         env:
           YT_URLS: ${{ github.event.inputs.video_urls }}
           USER_QUALITY: ${{ github.event.inputs.video_quality }}
@@ -114,7 +114,6 @@ jobs:
           read -ra URL_LIST <<< "$URLS_RAW"
           TOTAL_URLS=${#URL_LIST[@]}
           
-          # اعمال هوشمند کیفیت انتخابی کاربر روی فرمت yt-dlp
           if [ "${USER_QUALITY}" = "best" ]; then
             QUALITY="best"
             FORMAT="bestvideo+bestaudio/best"
