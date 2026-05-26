@@ -20,12 +20,19 @@ jobs:
 
       - name: Clean Videos
         run: |
+          # حذف تمام فایل‌ها و زیرپوشه‌ها بدون آسیب زدن به خود پوشه اصلی
           rm -rf videos/*
           mkdir -p videos
-          echo "# Videos Cleared" > videos/README.md
+          # ساخت یک فایل نشانه تا پوشه خالی نماند و گیت ارور ندهد
+          echo "# Videos Directory Cleared" > videos/README.md
 
       - name: Commit and Push
         run: |
-          git add videos/
-          git diff --cached --quiet || git commit -m "🧹 Cleaned up videos folder"
-          git push origin HEAD:${{ github.ref_name }}
+          git add videos/README.md
+          # بررسی هوشمند تغییرات؛ اگر پوشه از قبل خالی بود هم بدون ارور عبور می‌کند
+          if ! git diff --cached --quiet; then
+            git commit -m "🧹 Cleaned up videos folder"
+            git push origin HEAD:${{ github.ref_name }}
+          else
+            echo "Storage is already clean. Nothing to do!"
+          fi
