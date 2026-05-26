@@ -1,0 +1,105 @@
+name: 03 - ⚙️ Maintenance & Cleanup پاکسازی پوشه Video💫
+
+on:
+  workflow_dispatch:
+
+jobs:
+  cleanup-videos:
+    name: "🧹 Cleaning Up Videos Folder"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+
+      - name: Purge Videos and Reset Master List
+        run: |
+          echo "========================================"
+          echo "🧹 Starting storage cleanup process..."
+          echo "========================================"
+          
+          # حذف تمام محتویات داخل پوشه ویدیوها
+          if [ -d "videos" ]; then
+            rm -rf videos/*
+          else
+            mkdir -p videos
+          fi
+          
+          # بازسازی فایل مستر لیست به صورت کاملاً تمیز
+          MASTER_README="videos/README.md"
+          { 
+            echo "# DOWNLOADED VIDEOS LIST :"; 
+            echo ""; 
+            echo "----"; 
+            echo ""; 
+            echo "> ℹ️ No videos available. Storage is clean.";
+          } > "$MASTER_README"
+          
+          echo "✅ Videos folder successfully emptied."
+
+      - name: Commit and Push Changes
+        run: |
+          BRANCH="${GITHUB_REF_NAME}"
+          git fetch origin "$BRANCH"
+          git reset --hard origin/"$BRANCH"
+          
+          # اعمال دوباره حذفیات روی برنچ اصلی
+          rm -rf videos/*
+          mkdir -p videos
+          
+          MASTER_README="videos/README.md"
+          { 
+            echo "# DOWNLOADED VIDEOS LIST :"; 
+            echo ""; 
+            echo "----"; 
+            echo ""; 
+            echo "> ℹ️ No videos available. Storage is clean.";
+          } > "$MASTER_README"
+
+          git add videos/
+          git add videos/README.md
+
+          if ! git diff --cached --quiet; then
+            git commit -m "[SYSTEM] Repository storage cleaned up successfully [skip ci]"
+            PUSH_RETRY=0
+            while [ $PUSH_RETRY -lt 5 ]; do
+              PUSH_RETRY=$((PUSH_RETRY + 1))
+              if timeout 60 git push origin HEAD:"$BRANCH"; then
+                echo ""
+                echo "========================================"
+                echo "✅ پوشه ویدیوها کاملاً پاکسازی و هارد آزاد شد!"
+                echo "========================================"
+                echo ""
+                break
+              else
+                echo "Push failed, retrying $PUSH_RETRY/5..."
+                sleep 5
+                git fetch origin "$BRANCH"
+                git reset --hard origin/"$BRANCH"
+                rm -rf videos/*
+                mkdir -p videos
+                { 
+                  echo "# DOWNLOADED VIDEOS LIST :"; 
+                  echo ""; 
+                  echo "----"; 
+                  echo ""; 
+                  echo "> ℹ️ No videos available. Storage is clean.";
+                } > "$MASTER_README"
+                git add videos/
+                git add videos/README.md
+                git diff --cached --quiet || git commit -m "[SYSTEM] Repository storage cleaned up successfully [skip ci]"
+              fi
+            done
+          else
+            echo "Storage was already clean. No changes to push."
+          fi
