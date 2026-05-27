@@ -44,7 +44,7 @@ A simple and efficient way to download YouTube videos directly through GitHub Ac
 *Special thanks by **Madrhyan***
 
 
-<img width="240" height="426" alt="0527" src="https://github.com/user-attachments/assets/a1a11641-9286-49c2-ad6a-050fb5e0d3a5" />
+<img width="721" height="303" alt="0527" src="https://github.com/user-attachments/assets/d65a0e6b-3a00-433f-a05d-3f9d2859e3da" />
 
 
 
