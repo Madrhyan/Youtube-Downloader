@@ -1,4 +1,4 @@
-name: 02 - 🚀YT یوتیوب پلیست دانلودر
+name: 02 - 🚀YT Playlist Downloader
 
 on:
   workflow_dispatch:
