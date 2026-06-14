@@ -11,7 +11,7 @@ on:
         description: '🎬 انتخاب کیفیت ویدیو'
         required: true
         type: choice
-        default: 'best'
+        default: '480'
         options:
           - 'best'
           - '1080'
