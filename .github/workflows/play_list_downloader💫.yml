@@ -3,8 +3,8 @@ name: 02 - 🚀YT Playlist Downloader
 on:
   workflow_dispatch:
     inputs:
-      playlist_url:
-        description: '📥 لینک پلیست یوتیوب'
+      video_urls:
+        description: '📥 لینک ویدیوها - چند لینک را با فاصله از هم جدا کنید'
         required: true
         type: string
       video_quality:
@@ -20,10 +20,10 @@ on:
           - '360'
 
 jobs:
-  get-playlist-free:
-    name: "📥 Processing Playlist Download Workflow"
+  get-video-free:
+    name: "📥 Processing Video Download Workflow"
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 180
     permissions:
       contents: write
 
@@ -32,19 +32,18 @@ jobs:
         run: |
           echo ""
           echo "========================================"
-          echo "🚀 ULTIMATE YOUTUBE PLAYLIST DOWNLOADER"
+          echo "🚀 ULTIMATE YOUTUBE DOWNLOADER"
           echo "========================================"
           echo ""
           echo "🎯 Selected Quality: ${{ github.event.inputs.video_quality }}"
-          echo "📋 Playlist URL: ${{ github.event.inputs.playlist_url }}"
           echo ""
           echo "========================================"
           echo ""
 
       - name: Check URL provided
         run: |
-          if [ -z "${{ github.event.inputs.playlist_url }}" ]; then
-            echo "❌ No playlist URL provided!"
+          if [ -z "${{ github.event.inputs.video_urls }}" ]; then
+            echo "❌ No video URL provided!"
             exit 1
           fi
 
@@ -102,7 +101,7 @@ jobs:
 
       - name: Core Download Engine
         env:
-          PLAYLIST_URL: ${{ github.event.inputs.playlist_url }}
+          YT_URLS: ${{ github.event.inputs.video_urls }}
           USER_QUALITY: ${{ github.event.inputs.video_quality }}
           REPO_OWNER_ENV: ${{ github.repository_owner }}
           REPO_NAME_ENV: ${{ github.event.repository.name }}
@@ -111,8 +110,10 @@ jobs:
           REPO_OWNER="${REPO_OWNER_ENV}"
           REPO_NAME="${REPO_NAME_ENV}"
           BRANCH="${BRANCH_ENV}"
-          URL="${PLAYLIST_URL}"
-
+          URLS_RAW="${YT_URLS}"
+          read -ra URL_LIST <<< "$URLS_RAW"
+          TOTAL_URLS=${#URL_LIST[@]}
+          
           if [ "${USER_QUALITY}" = "best" ]; then
             QUALITY="best"
             FORMAT="bestvideo+bestaudio/best"
@@ -120,7 +121,7 @@ jobs:
             QUALITY="${USER_QUALITY}"
             FORMAT="bestvideo[height<=${USER_QUALITY}]+bestaudio/bestvideo[height<=${USER_QUALITY}]*+bestaudio*/best[height<=${USER_QUALITY}]/best"
           fi
-
+          
           SPLIT_MB=45
           SPLIT_BYTES=$(( SPLIT_MB * 1024 * 1024 ))
           BACKUP_DIR="/tmp/video_backup_$$"
@@ -129,8 +130,9 @@ jobs:
           > /tmp/video_info.txt
 
           echo "========================================"
-          echo "🚀 Downloading Playlist in Quality: $QUALITY"
+          echo "🚀 Downloading in Target Quality: $QUALITY"
           echo "========================================"
+          echo "Total URLs to download: $TOTAL_URLS"
 
           sanitize_name() {
             echo "$1" | sed 's/ /-/g' | sed 's/　/-/g' | tr -s '-'
@@ -138,66 +140,21 @@ jobs:
           urlencode() {
             python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$1"
           }
-
-          # دریافت لیست ویدیوهای پلیست
-          echo "📋 Fetching playlist video list..."
-          VIDEO_URLS_JSON=$(yt-dlp \
-            --proxy "socks5://127.0.0.1:1080" \
-            --flat-playlist \
-            --print-to-file url /tmp/playlist_urls.txt \
-            --no-warnings \
-            "$URL" 2>/dev/null || true)
-
-          # اگه با پروکسی نشد، بدون پروکسی امتحان کن
-          if [ ! -f /tmp/playlist_urls.txt ] || [ ! -s /tmp/playlist_urls.txt ]; then
-            echo "Trying without proxy..."
-            yt-dlp \
-              --flat-playlist \
-              --print-to-file url /tmp/playlist_urls.txt \
-              --no-warnings \
-              "$URL" 2>/dev/null || true
-          fi
-
-          if [ ! -f /tmp/playlist_urls.txt ] || [ ! -s /tmp/playlist_urls.txt ]; then
-            echo "❌ Could not fetch playlist!"
-            exit 1
-          fi
-
-          TOTAL_VIDEOS=$(wc -l < /tmp/playlist_urls.txt)
-          echo "✅ Found $TOTAL_VIDEOS videos in playlist."
-          echo ""
-
-          # ذخیره نام پلیست
-          PLAYLIST_TITLE=$(yt-dlp \
-            --proxy "socks5://127.0.0.1:1080" \
-            --flat-playlist \
-            --print "%(playlist_title)s" \
-            --no-warnings \
-            --playlist-items 1 \
-            "$URL" 2>/dev/null | head -1 || echo "playlist")
-          if [ -z "$PLAYLIST_TITLE" ] || [ "$PLAYLIST_TITLE" = "NA" ]; then
-            PLAYLIST_TITLE="playlist"
-          fi
-          PLAYLIST_TITLE=$(sanitize_name "$PLAYLIST_TITLE")
-          echo "$PLAYLIST_TITLE" > /tmp/playlist_title.txt
-          echo "$TOTAL_VIDEOS" > /tmp/total_videos.txt
-
           download_video() {
-            local METHOD=$1; local VID_URL=$2; local TMP_DIR=$3;
+            local METHOD=$1; local URL=$2; local TMP_DIR=$3;
             echo "Trying download method $METHOD..."
-            COMMON_FLAGS="--merge-output-format mp4 --write-thumbnail --convert-thumbnails jpg --no-cache-dir --output ${TMP_DIR}/%(title)s.%(ext)s --no-part --no-playlist --retries 5 --fragment-retries 5 --no-check-certificates --concurrent-fragments 8 --buffer-size 16K --http-chunk-size 10M --progress --newline"
+            COMMON_FLAGS="--merge-output-format mp4 --write-thumbnail --convert-thumbnails png --no-cache-dir --output ${TMP_DIR}/%(title)s.%(ext)s --no-part --yes-playlist --retries 5 --fragment-retries 5 --no-check-certificates --concurrent-fragments 8 --buffer-size 16K --http-chunk-size 10M --progress --newline"
             case $METHOD in
-              1) yt-dlp --proxy "socks5://127.0.0.1:1080" --format "$FORMAT" $COMMON_FLAGS --extractor-args "youtube:player_client=web" --js-runtimes deno --remote-components ejs:github --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" "$VID_URL";;
-              2) yt-dlp --proxy "socks5://127.0.0.1:1080" --format "$FORMAT" $COMMON_FLAGS --extractor-args "youtube:player_client=web" --js-runtimes deno --remote-components ejs:npm "$VID_URL";;
-              3) yt-dlp --proxy "socks5://127.0.0.1:1080" --format "$FORMAT" $COMMON_FLAGS --extractor-args "youtube:player_client=web,mweb,android_vr" --js-runtimes deno --remote-components ejs:github "$VID_URL";;
-              4) yt-dlp --proxy "socks5://127.0.0.1:1080" --format "$FORMAT" $COMMON_FLAGS --extractor-args "youtube:player_client=mweb" "$VID_URL";;
-              5) yt-dlp --proxy "socks5://127.0.0.1:1080" --format "$FORMAT" $COMMON_FLAGS --extractor-args "youtube:player_client=android_vr" "$VID_URL";;
-              6) yt-dlp --format "$FORMAT" $COMMON_FLAGS --extractor-args "youtube:player_client=web" --js-runtimes deno --remote-components ejs:github "$VID_URL";;
-              7) yt-dlp --format "$FORMAT" $COMMON_FLAGS --extractor-args "youtube:player_client=mweb" "$VID_URL";;
-              8) yt-dlp --proxy "socks5://127.0.0.1:1080" --format "$FORMAT" $COMMON_FLAGS --extractor-args "youtube:player_client=android" "$VID_URL";;
+              1) yt-dlp --proxy "socks5://127.0.0.1:1080" --format "$FORMAT" $COMMON_FLAGS --extractor-args "youtube:player_client=web" --js-runtimes deno --remote-components ejs:github --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" "$URL";;
+              2) yt-dlp --proxy "socks5://127.0.0.1:1080" --format "$FORMAT" $COMMON_FLAGS --extractor-args "youtube:player_client=web" --js-runtimes deno --remote-components ejs:npm "$URL";;
+              3) yt-dlp --proxy "socks5://127.0.0.1:1080" --format "$FORMAT" $COMMON_FLAGS --extractor-args "youtube:player_client=web,mweb,android_vr" --js-runtimes deno --remote-components ejs:github "$URL";;
+              4) yt-dlp --proxy "socks5://127.0.0.1:1080" --format "$FORMAT" $COMMON_FLAGS --extractor-args "youtube:player_client=mweb" "$URL";;
+              5) yt-dlp --proxy "socks5://127.0.0.1:1080" --format "$FORMAT" $COMMON_FLAGS --extractor-args "youtube:player_client=android_vr" "$URL";;
+              6) yt-dlp --format "$FORMAT" $COMMON_FLAGS --extractor-args "youtube:player_client=web" --js-runtimes deno --remote-components ejs:github "$URL";;
+              7) yt-dlp --format "$FORMAT" $COMMON_FLAGS --extractor-args "youtube:player_client=mweb" "$URL";;
+              8) yt-dlp --proxy "socks5://127.0.0.1:1080" --format "$FORMAT" $COMMON_FLAGS --extractor-args "youtube:player_client=android" "$URL";;
             esac
           }
-
           RANDOM_WORDS=("alpha" "beta" "gamma" "delta" "epsilon" "zeta" "theta" "kappa" "lambda" "sigma")
           get_random_word() { echo "${RANDOM_WORDS[$RANDOM % ${#RANDOM_WORDS[@]}]}_$RANDOM"; }
           get_unique_folder() {
@@ -207,23 +164,29 @@ jobs:
             while [ -d "$BASE_PATH/${NAME}_${RANDOM_SUFFIX}" ] || [ -d "$BACKUP_DIR/${NAME}_${RANDOM_SUFFIX}" ]; do RANDOM_SUFFIX=$(get_random_word); done
             echo "${NAME}_${RANDOM_SUFFIX}"
           }
+          normalize_youtube_url() {
+            local INPUT_URL="$1"
+            if [[ "$INPUT_URL" =~ youtu\.be/([a-zA-Z0-9_-]+) ]]; then
+              VIDEO_ID="${BASH_REMATCH[1]}"; VIDEO_ID="${VIDEO_ID%%\?*}";
+              echo "https://www.youtube.com/watch?v=${VIDEO_ID}"
+            else
+              echo "$INPUT_URL"
+            fi
+          }
 
-          VIDEO_INDEX=0
-          while IFS= read -r VID_URL; do
-            [ -z "$VID_URL" ] && continue
-            VIDEO_INDEX=$((VIDEO_INDEX + 1))
+          URL_INDEX=0
+          for URL in "${URL_LIST[@]}"; do
+            URL_INDEX=$((URL_INDEX + 1))
+            URL=$(normalize_youtube_url "$URL")
             echo "============================================================"
-            echo "📥 Downloading video $VIDEO_INDEX / $TOTAL_VIDEOS"
-            echo "🔗 URL: $VID_URL"
+            echo "Processing URL $URL_INDEX / $TOTAL_URLS : $URL"
             echo "============================================================"
-
-            TMP_DIR="tmp_downloads_${VIDEO_INDEX}"
+            TMP_DIR="tmp_downloads_${URL_INDEX}"
             mkdir -p "$TMP_DIR"
             DOWNLOAD_SUCCESS=false
-
             for METHOD in 1 2 3 4 5 6 7 8; do
-              if download_video $METHOD "$VID_URL" "$TMP_DIR"; then
-                echo "✅ Download successful with method $METHOD!"
+              if download_video $METHOD "$URL" "$TMP_DIR"; then
+                echo "Download successful with method $METHOD!"
                 DOWNLOAD_SUCCESS=true
                 break
               else
@@ -231,36 +194,21 @@ jobs:
                 sleep 3
               fi
             done
-
             if [ "$DOWNLOAD_SUCCESS" = false ]; then
-              echo "❌ All download methods failed for: $VID_URL — skipping."
-              rm -rf "$TMP_DIR"
-              continue
+              echo "❌ All download methods failed for URL: $URL — skipping."; rm -rf "$TMP_DIR"; continue;
             fi
-
             find "$TMP_DIR" -name "*.part" -delete
-
             for FILE in "$TMP_DIR"/*; do
               [ -f "$FILE" ] || continue
               if [[ "$FILE" == *.jpg ]] || [[ "$FILE" == *.webp ]]; then continue; fi
-
-              SIZE=$(stat -c%s "$FILE")
-              BASENAME=$(basename "$FILE")
-              FILENAME_NO_EXT="${BASENAME%.*}"
-              EXT="${BASENAME##*.}"
+              SIZE=$(stat -c%s "$FILE"); BASENAME=$(basename "$FILE"); FILENAME_NO_EXT="${BASENAME%.*}"; EXT="${BASENAME##*.}";
               FILENAME_NO_EXT=$(sanitize_name "$FILENAME_NO_EXT")
-
               FINAL_FOLDER_NAME=$(get_unique_folder "videos" "$FILENAME_NO_EXT")
               mkdir -p "$BACKUP_DIR/${FINAL_FOLDER_NAME}"
-
               THUMB_FILE=$(ls "$TMP_DIR"/*.jpg 2>/dev/null | head -1)
-              if [ -n "$THUMB_FILE" ] && [ -f "$THUMB_FILE" ]; then
-                cp "$THUMB_FILE" "$BACKUP_DIR/${FINAL_FOLDER_NAME}/thumbnail.jpg"
-              fi
-
+              if [ -n "$THUMB_FILE" ] && [ -f "$THUMB_FILE" ]; then cp "$THUMB_FILE" "$BACKUP_DIR/${FINAL_FOLDER_NAME}/thumbnail.jpg"; fi
               echo "${FILENAME_NO_EXT}|${FINAL_FOLDER_NAME}" >> /tmp/video_info.txt
               FOLDER_ENCODED=$(urlencode "${FINAL_FOLDER_NAME}")
-
               if [ "$SIZE" -gt "$SPLIT_BYTES" ]; then
                 ARCHIVE_BASE="$BACKUP_DIR/${FINAL_FOLDER_NAME}/${FINAL_FOLDER_NAME}"
                 zip -0 -s ${SPLIT_MB}m "${ARCHIVE_BASE}.zip" "$FILE"
@@ -306,10 +254,9 @@ jobs:
                   printf '%s\n' "| Property | Value |"
                   printf '%s\n' "|----------|-------|"
                   printf '%s\n' "| **Video Name** | \`${FILENAME_NO_EXT}\` |"
-                  printf '%s\n' "| **Original Link** | [YouTube Video](${VID_URL}) |"
+                  printf '%s\n' "| **Original Link** | [YouTube Video](${URL}) |"
                   printf '%s\n' "| **Total Size** | **${PART_COUNT} parts** - **${TOTAL_SIZE_MB} MB** |"
                   printf '%s\n' "| **Quality** | **${QUALITY}** |"
-                  printf '%s\n' "| **Video #** | **${VIDEO_INDEX} of ${TOTAL_VIDEOS}** |"
                   printf '%s\n' ""
                   printf '%s\n' "---"
                   printf '%s\n' ""
@@ -349,10 +296,9 @@ jobs:
                   printf '%s\n' "| Property | Value |"
                   printf '%s\n' "|----------|-------|"
                   printf '%s\n' "| **Video Name** | \`${FILENAME_NO_EXT}\` |"
-                  printf '%s\n' "| **Original Link** | [YouTube Video](${VID_URL}) |"
+                  printf '%s\n' "| **Original Link** | [YouTube Video](${URL}) |"
                   printf '%s\n' "| **Total Size** | **${SIZE_MB} MB** |"
                   printf '%s\n' "| **Quality** | **${QUALITY}** |"
-                  printf '%s\n' "| **Video #** | **${VIDEO_INDEX} of ${TOTAL_VIDEOS}** |"
                   printf '%s\n' ""
                   printf '%s\n' "---"
                   printf '%s\n' ""
@@ -366,10 +312,8 @@ jobs:
                 } > "$README_FILE"
               fi
             done
-
             rm -rf "$TMP_DIR"
-          done < /tmp/playlist_urls.txt
-
+          done
           echo "$BACKUP_DIR" > /tmp/backup_dir_path.txt
           echo "REPO_OWNER_ENV=${REPO_OWNER_ENV}" > /tmp/env_vars.txt
           echo "REPO_NAME_ENV=${REPO_NAME_ENV}" >> /tmp/env_vars.txt
@@ -388,8 +332,6 @@ jobs:
           REPO_OWNER=${REPO_OWNER_ENV}
           REPO_NAME=${REPO_NAME_ENV}
           BACKUP_DIR=$(cat /tmp/backup_dir_path.txt)
-          PLAYLIST_TITLE=$(cat /tmp/playlist_title.txt 2>/dev/null || echo "playlist")
-          TOTAL_VIDEOS=$(cat /tmp/total_videos.txt 2>/dev/null || echo "?")
 
           BACKUP_FILE_COUNT=$(find "$BACKUP_DIR" -type f 2>/dev/null | wc -l)
           if [ "$BACKUP_FILE_COUNT" -eq 0 ]; then
@@ -399,19 +341,7 @@ jobs:
 
           regenerate_master_readme() {
             MASTER_README="videos/README.md"
-            {
-              echo "# 📋 ${PLAYLIST_TITLE}"
-              echo ""
-              echo "> 🚀 Downloaded via Custom Auto-Downloader Engine"
-              echo ""
-              echo "| Property | Value |"
-              echo "|----------|-------|"
-              echo "| **Playlist** | \`${PLAYLIST_TITLE}\` |"
-              echo "| **Total Videos** | **${TOTAL_VIDEOS}** |"
-              echo ""
-              echo "----"
-              echo ""
-            } > "$MASTER_README"
+            { echo "# DOWNLOADED VIDEOS LIST :"; echo ""; echo "----"; echo ""; } > "$MASTER_README"
             NUM=0
             for folder in videos/*/; do
               [ -d "$folder" ] || continue
@@ -434,7 +364,7 @@ jobs:
           git add -f videos/README.md
 
           if ! git diff --cached --quiet; then
-            git commit -m "[SYSTEM] YouTube playlist downloaded: ${PLAYLIST_TITLE} [skip ci]"
+            git commit -m "[SYSTEM] YouTube video downloaded successfully [skip ci]"
             PUSH_RETRY=0
             while [ $PUSH_RETRY -lt 10 ]; do
               PUSH_RETRY=$((PUSH_RETRY + 1))
@@ -454,7 +384,7 @@ jobs:
                 git add -f videos/
                 regenerate_master_readme
                 git add -f videos/README.md
-                git diff --cached --quiet || git commit -m "[SYSTEM] YouTube playlist downloaded: ${PLAYLIST_TITLE} [skip ci]"
+                git diff --cached --quiet || git commit -m "[SYSTEM] YouTube video downloaded successfully [skip ci]"
               fi
             done
           fi
